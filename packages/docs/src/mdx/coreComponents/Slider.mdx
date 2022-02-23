@@ -26,6 +26,7 @@ export const DemoComponent = () => {
   const [valueFieldUnitLabel, setValueFieldUnitLabel] = useState(0)
   const [metaSliderValue, setMetaSliderValue] = useState(0)
   const [ticksOnlySliderValue, setTicksOnlySliderValue] = useState(0)
+  const [rangeSliderValue, setRangeSliderValue] = useState([3, 7])
   return (
     <>
       <Slider
@@ -80,6 +81,14 @@ export const DemoComponent = () => {
           snap: true,
         }}
       />
+      <SpaceBlock variant={16} />
+      <SliderField
+        label="Range slider"
+        min={-20}
+        max={20}
+        value={rangeSliderValue}
+        handleChange={setRangeSliderValue}
+      />
     </>
   )
 }
@@ -124,6 +133,18 @@ Slider with ticks
   tickConfig={{
     ticks: [{ position: -10 }, { position: 0 }, { position: 10 }],
   }}
+/>
+```
+
+Slider with range, value contains an array with from and to number.
+
+```typescript type=live
+<SliderField
+  label="Range slider"
+  min={-10}
+  max={10}
+  value={[3, 7]}
+  handleChange={() => {}}
 />
 ```
 

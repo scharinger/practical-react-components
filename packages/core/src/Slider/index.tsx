@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import styled, { css } from 'styled-components'
-import { usePressed, useVisibleFocus } from 'react-hooks-shareable'
+import {
+  // pressed
+  useVisibleFocus,
+} from 'react-hooks-shareable'
 
 import {
   shape,
@@ -269,7 +272,7 @@ export interface SliderProps extends BaseProps {
   /**
    * Specifies default value between min and max value.
    */
-  readonly value: number
+  readonly value: number | readonly [number, number]
   /**
    * Specifies minimum value of the slider.
    */
@@ -281,7 +284,7 @@ export interface SliderProps extends BaseProps {
   /**
    * Executes a JavaScript when a user changes the value.
    */
-  readonly handleChange: (value: number) => void
+  readonly handleChange: (value: number | readonly [number, number]) => void
   /**
    * If `true`, the slider will be disabled.
    */
@@ -311,7 +314,7 @@ export const Meta = styled.div`
  * TODO: according to UX, need to add `variant` property to have style `dashed`
  */
 export const Slider: React.FC<SliderProps> = ({
-  value,
+  value: valueProp,
   min = 0,
   max = 100,
   handleChange,
@@ -328,9 +331,11 @@ export const Slider: React.FC<SliderProps> = ({
   ...props
 }) => {
   const sliderRef = useRef<BaseElement>(null)
-  const knobRef = useRef(null)
-  const pressed = usePressed(knobRef)
   const [sliderWidth, setSliderWidth] = useState(0)
+
+  const isRangeSlider = typeof valueProp !== 'number'
+  const value: ReadonlyArray<number> =
+    typeof valueProp === 'number' ? [valueProp] : valueProp
 
   // Spread default values with incoming values since they are optional
   const { ticks, snap } = useMemo(() => {
@@ -340,10 +345,17 @@ export const Slider: React.FC<SliderProps> = ({
     }
   }, [tickConfig])
 
-  const fraction = useMemo(
-    () => clamp((value - min) / (max - min)),
+  const fractions: ReadonlyArray<number> = useMemo(
+    () => value.map((val: number) => clamp((val - min) / (max - min))),
     [max, min, value]
   )
+
+  const knobRefs = useRef([])
+  // const pressed = usePressed(knobRefs)
+
+  useEffect(() => {
+    knobRefs.current = knobRefs.current.slice(0, fractions.length)
+  }, [fractions])
 
   // Generate the ticks with its position along the x-axis
   const tickMarkers = useMemo(
@@ -393,7 +405,21 @@ export const Slider: React.FC<SliderProps> = ({
           x = snapTo
         }
 
-        handleChange(convertDecimalToValue(x))
+        const clickedDecimalValue = convertDecimalToValue(x)
+        const closestSide =
+          Math.abs(fractions[0] - x) < Math.abs(fractions[1] - x) ? 0 : 1
+
+        // decide which side of the range is closest and should be updated
+        const newRangeSliderValue =
+          closestSide === 0
+            ? [clickedDecimalValue, value[1]]
+            : [value[0], clickedDecimalValue]
+
+        const newValue = isRangeSlider
+          ? newRangeSliderValue
+          : clickedDecimalValue
+
+        handleChange(newValue)
       }
     },
     [handleChange, max, min, onClick, snap, snapValues, tickMarkers.length]
@@ -416,32 +442,39 @@ export const Slider: React.FC<SliderProps> = ({
     }
   }, [])
 
-  // Track pointer position as soon as knob is pressed
-  useEffect(() => {
-    if (pressed) {
-      document.addEventListener('pointermove', handleClick)
-      document.addEventListener('pointerup', handleClick)
+  // // Track pointer position as soon as knob is pressed
+  // useEffect(() => {
+  //   if (!isRangeSlider && pressed) {
+  //     document.addEventListener('pointermove', handleClick)
+  //     document.addEventListener('pointerup', handleClick)
 
-      return () => {
-        document.removeEventListener('pointermove', handleClick)
-        document.removeEventListener('pointerup', handleClick)
-      }
-    }
-  }, [handleClick, pressed])
+  //     return () => {
+  //       document.removeEventListener('pointermove', handleClick)
+  //       document.removeEventListener('pointerup', handleClick)
+  //     }
+  //   }
+  // }, [handleClick, pressed])
 
   const getNextSnap = useCallback(
-    () => snapValues.find(snapValue => snapValue > fraction),
-    [snapValues, fraction]
+    () => snapValues.find((snapValue: number) => snapValue > fractions[0]),
+    [snapValues, fractions]
   )
   const getPreviousSnap = useCallback(
-    () => snapValues.reverse().find(snapValue => snapValue < fraction),
-    [snapValues, fraction]
+    () =>
+      snapValues
+        .reverse()
+        .find((snapValue: number) => snapValue < fractions[0]),
+    [snapValues, fractions]
   )
 
   // Keyboard support
   const handleKeyDown = useCallback<React.KeyboardEventHandler<BaseElement>>(
     event => {
       onKeyDown?.(event)
+
+      if (isRangeSlider) {
+        return
+      }
 
       if (!(event.key in SliderKeys)) {
         return
@@ -461,7 +494,7 @@ export const Slider: React.FC<SliderProps> = ({
         case SliderKeys.ArrowUp: {
           newValue = shouldSnapToTick
             ? convertDecimalToValue(getNextSnap())
-            : value + onePercent
+            : value[0] + onePercent
           break
         }
 
@@ -469,21 +502,21 @@ export const Slider: React.FC<SliderProps> = ({
         case SliderKeys.ArrowDown: {
           newValue = shouldSnapToTick
             ? convertDecimalToValue(getPreviousSnap())
-            : value - onePercent
+            : value[0] - onePercent
           break
         }
 
         case SliderKeys.PageUp: {
           newValue = shouldSnapToTick
             ? convertDecimalToValue(getNextSnap())
-            : value + onePercent * 10
+            : value[0] + onePercent * 10
           break
         }
 
         case SliderKeys.PageDown: {
           newValue = shouldSnapToTick
             ? convertDecimalToValue(getPreviousSnap())
-            : value - onePercent * 10
+            : value[0] - onePercent * 10
           break
         }
 
@@ -539,7 +572,7 @@ export const Slider: React.FC<SliderProps> = ({
   )
 
   const tickLabels = useMemo(() => {
-    return tickMarkers.map((tick, index) => {
+    return tickMarkers.map((tick, index: number) => {
       return {
         key: index,
         label: tick.label,
@@ -561,7 +594,7 @@ export const Slider: React.FC<SliderProps> = ({
         onClick={handleClick}
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        fraction={fraction}
+        fraction={fractions[1]}
         disabled={disabled}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
@@ -571,34 +604,37 @@ export const Slider: React.FC<SliderProps> = ({
       >
         <Rail ref={sliderRef}>
           <Trail
-            pressed={pressed}
-            style={{ transform: `scaleX(${fraction})` }}
+            // pressed={pressed}
+            style={{ transform: `scaleX(${fractions})` }}
           />
-          {tickMarkers.map((tick, index) => (
+          {tickMarkers.map((tick, index: number) => (
             <TickMarker
               key={index}
               position={tick.position}
               marker={tick.marker}
             />
           ))}
-          <Knob
-            fraction={fraction}
-            pressed={pressed}
-            style={{
-              transform: `translateX(-50%) translateX(${
-                fraction * sliderWidth
-              }px)`,
-            }}
-            ref={knobRef}
-          >
-            <KnobHalo fraction={fraction} />
-            <KnobCore>
-              <circle cx={8} cy={8} r={8} />
-            </KnobCore>
-            <KnobOutline>
-              <circle cx={8} cy={8} r={fraction === 0 ? 7.5 : 7} />
-            </KnobOutline>
-          </Knob>
+          {fractions.map((frac, i) => (
+            <Knob
+              key={i}
+              fraction={frac}
+              // pressed={pressed}
+              style={{
+                transform: `translateX(-50%) translateX(${
+                  frac * sliderWidth
+                }px)`,
+              }}
+              // ref={el => (knobRefs.current[i] = el)}
+            >
+              <KnobHalo fraction={frac} />
+              <KnobCore>
+                <circle cx={8} cy={8} r={8} />
+              </KnobCore>
+              <KnobOutline>
+                <circle cx={8} cy={8} r={frac === 0 ? 7.5 : 7} />
+              </KnobOutline>
+            </Knob>
+          ))}
         </Rail>
       </Track>
       {hasTickLabels ? (
