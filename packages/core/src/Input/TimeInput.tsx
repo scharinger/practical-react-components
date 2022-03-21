@@ -47,10 +47,13 @@ interface TimeValues {
  */
 const MAX_INPUT_VALUE = 100
 
+const MIN_TIME_VALUE = 0
+
 /**
  * Used to control the cursors position when state updates.
  */
 let inputPos = 0
+let inputPosEnd = 0
 
 const isNewValuesValid = ({ hour, minute, second }: TimeValues) => {
   const hourValidate = hour ?? 0
@@ -78,6 +81,42 @@ const isNewDurationValuesValid = ({ hour, minute, second }: TimeValues) => {
     minuteValidate < maxMinute &&
     secondValidate < maxSecond
   )
+}
+
+// cursor position: 0 1 2 3 4 5 6 7 8
+// time field:      |0|0|:|0|0|:|0|0|
+const SelectionRange = [
+  { label: 'Hours', value: [0, 2] },
+  { label: 'Minutes', value: [3, 5] },
+  { label: 'Seconds', value: [6, 8] },
+]
+const SelectionRangeHelper = {
+  getSelectionRange(selectionIndex: number) {
+    const match = SelectionRange.find(
+      element =>
+        element.value[0] <= selectionIndex && element.value[1] >= selectionIndex
+    )
+    if (match === undefined) {
+      throw new Error('Selection is outside of expected range.')
+    }
+    return match
+  },
+  getNextSelectionRange(selectionIndex: number) {
+    const current = this.getSelectionRange(selectionIndex)
+    const index = SelectionRange.findIndex(
+      range => range.label === current.label
+    )
+    console.log(index)
+    return SelectionRange[index + 1]
+  },
+  getPrevSelectionRange(selectionIndex: number) {
+    const current = this.getSelectionRange(selectionIndex)
+    const index = SelectionRange.findIndex(
+      range => range.label === current.label
+    )
+    console.log(index)
+    return SelectionRange[index - 1]
+  },
 }
 
 enum CursorPositions {
@@ -324,6 +363,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
 
   const setCursorPosition = useCallback(
     (newPos, newPosEnd?) => {
+      // console.log('setCursorPosition', { newPos, newPosEnd })
       if (
         inputElement.current !== null &&
         document.activeElement === inputElement.current
@@ -337,9 +377,28 @@ export const TimeInput: React.FC<TimeInputProps> = ({
     [inputElement]
   )
 
-  useLayoutEffect(
-    () => setCursorPosition(inputPos),
-    [inputValue, setCursorPosition]
+  useLayoutEffect(() => {
+    // console.log('useLayoutEffect')
+    setCursorPosition(inputPos, inputPosEnd)
+  }, [inputValue, setCursorPosition])
+
+  const handleOnClick = useCallback(
+    (event: React.MouseEvent<HTMLInputElement>) => {
+      console.log(
+        event.currentTarget.selectionStart,
+        event.currentTarget.selectionEnd,
+        event.currentTarget.selectionDirection
+      )
+      if (event.currentTarget.selectionStart === null) {
+        return
+      }
+      const range = SelectionRangeHelper.getSelectionRange(
+        event.currentTarget.selectionStart
+      )
+      console.log({ range })
+      setCursorPosition(...range.value)
+    },
+    []
   )
 
   const onKeyDown = useCallback(
@@ -348,22 +407,62 @@ export const TimeInput: React.FC<TimeInputProps> = ({
 
       console.log({ keyValue, backspace })
       const keyIsNumber = /^\d$/.test(keyValue)
+      const keyIsArrow = [
+        'ArrowUp',
+        'ArrowDown',
+        'ArrowLeft',
+        'ArrowRight',
+      ].includes(keyValue)
+      const keyIsLeftRight = ['ArrowLeft', 'ArrowRight'].includes(keyValue)
+      const keyIsUpDown = ['ArrowUp', 'ArrowDown'].includes(keyValue)
       // If the key pressed is not a number.
-      if (!keyIsNumber && keyValue !== 'ArrowUp' && keyValue !== 'ArrowDown') {
-        console.log('not number so returning')
+      if (!keyIsNumber && !keyIsArrow) {
+        console.log('not number or key so returning')
         return
       }
 
       // Find input position and get target position for the new value.
       event.preventDefault()
+
       const { currentTarget } = event
+
+      if (currentTarget.selectionStart === null) {
+        console.log('currentTarget.selectionStart===null!')
+        return
+      }
+
+      const selRange = SelectionRangeHelper.getSelectionRange(
+        currentTarget.selectionStart
+      )
+      // console.log({ selRange })
+      if (keyIsLeftRight) {
+        let newRange
+        if (keyValue === 'ArrowRight') {
+          newRange = SelectionRangeHelper.getNextSelectionRange(
+            currentTarget.selectionStart
+          )
+        }
+        if (keyValue === 'ArrowLeft') {
+          newRange = SelectionRangeHelper.getPrevSelectionRange(
+            currentTarget.selectionStart
+          )
+        }
+        if (newRange !== undefined) {
+          setCursorPosition(...newRange.value)
+        }
+        return
+      }
+
       const currentValue = currentTarget.value
       inputPos = getTargetPos(
         currentTarget.selectionStart ?? currentValue.length,
         backspace
       )
-      const currentPositionValue = inputValue[inputPos]
-      console.log({ inputPos, inputValue, currentPositionValue })
+
+      const currentPositionValue = keyIsNumber
+        ? inputValue[inputPos]
+        : inputValue.substring(...selRange.value)
+      // console.log({ inputPos, inputValue, currentPositionValue })
 
       let newValue
       let currentNumberValue = Number.parseInt(currentPositionValue)
@@ -373,12 +472,12 @@ export const TimeInput: React.FC<TimeInputProps> = ({
         if (keyValue === 'ArrowUp') {
           currentNumberValue++
         }
-        if (keyValue === 'ArrowDown') {
+        if (keyValue === 'ArrowDown' && currentNumberValue > MIN_TIME_VALUE) {
           currentNumberValue--
         }
         newValue = currentNumberValue
       }
-      console.log({ newValue })
+      // console.log({ newValue })
 
       // If at last position of input, no need write anything just return.
       if (currentValue.length <= inputPos || inputPos === -1) {
@@ -391,7 +490,8 @@ export const TimeInput: React.FC<TimeInputProps> = ({
       const newInputValue = `${currentValue.substring(
         0,
         inputPos
-      )}${newValue}${currentValue.substring(inputPos + 1, currentValue.length)}`
+      )}${newValue}${currentValue.substring(inputPos + 2, currentValue.length)}`
+
       const newCallbackValues = newInputValue
         .split(':')
         .reduce<TimeValues>((acc, v) => {
@@ -411,7 +511,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
           return acc
         }, {})
 
-      console.log({ inputPos, inputValue, newInputValue })
+      // console.log({ inputPos, inputValue, newInputValue })
 
       if (!isNewValuesValid(newCallbackValues)) {
         console.log('new value not valid')
@@ -419,14 +519,15 @@ export const TimeInput: React.FC<TimeInputProps> = ({
       }
 
       // If we pressed backspace we want to stay at current position we have else move 1 forward.
-      inputPos += backspace || !keyIsNumber ? 0 : 1
-      inputPos = moveCursor(inputPos, backspace)
+      // inputPos += backspace || !keyIsNumber ? 0 : 1
+      // inputPos = moveCursor(inputPos, backspace)
 
       // If the value is the same as before we need to set the cursors position
       // because useEffect does not run.
-      if (newInputValue === inputValue) {
-        setCursorPosition(inputPos, inputPos + 2)
-      }
+      // if (newInputValue === inputValue) {
+      inputPosEnd = inputPos + 2
+      setCursorPosition(inputPos, inputPosEnd)
+      // }
       onChange(newCallbackValues)
     },
     [
@@ -447,6 +548,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
         value={inputValue}
         inputRef={inputElement}
         onKeyDown={onKeyDown}
+        onClick={handleOnClick}
         {...props}
       />
       {hour12 && hour !== undefined ? (
