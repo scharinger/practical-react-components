@@ -54,6 +54,10 @@ const MIN_TIME_VALUE = 0
  */
 let inputPos = 0
 let inputPosEnd = 0
+let inputTrack = 0
+let tempValue = '00'
+
+console.log({ inputTrack })
 
 const isNewValuesValid = ({ hour, minute, second }: TimeValues) => {
   const hourValidate = hour ?? 0
@@ -368,6 +372,15 @@ export const TimeInput: React.FC<TimeInputProps> = ({
         inputElement.current !== null &&
         document.activeElement === inputElement.current
       ) {
+        if (
+          newPos === inputElement.current.selectionStart &&
+          newPosEnd === inputElement.current.selectionEnd
+        ) {
+          console.log('no change')
+          return
+        }
+        inputTrack = 0
+        tempValue = '00'
         inputElement.current.setSelectionRange(
           newPos,
           newPosEnd === undefined ? newPos : newPosEnd
@@ -414,7 +427,8 @@ export const TimeInput: React.FC<TimeInputProps> = ({
         'ArrowRight',
       ].includes(keyValue)
       const keyIsLeftRight = ['ArrowLeft', 'ArrowRight'].includes(keyValue)
-      const keyIsUpDown = ['ArrowUp', 'ArrowDown'].includes(keyValue)
+      // const keyIsUpDown = ['ArrowUp', 'ArrowDown'].includes(keyValue)
+
       // If the key pressed is not a number.
       if (!keyIsNumber && !keyIsArrow) {
         console.log('not number or key so returning')
@@ -434,7 +448,46 @@ export const TimeInput: React.FC<TimeInputProps> = ({
       const selRange = SelectionRangeHelper.getSelectionRange(
         currentTarget.selectionStart
       )
-      // console.log({ selRange })
+      let newVal
+      if (keyIsNumber) {
+        inputTrack++
+        console.log('inputTrack', inputTrack)
+        const selRangeVal = tempValue
+        // switch (selRange.label) {
+        //   case 'Hours':
+        //     selRangeVal = value.hour
+        //     break
+        //   case 'Minutes':
+        //     selRangeVal = value.minute
+        //     break
+        //   case 'Seconds':
+        //     selRangeVal = value.second
+        //     break
+
+        //   default:
+        //     break
+        // }
+        console.log(value, selRangeVal?.toString() + keyValue)
+        newVal = Number.parseInt(selRangeVal?.toString() + keyValue)
+        tempValue = newVal.toString()
+
+        if (inputTrack === 2) {
+          console.log('move right')
+          const newRange = SelectionRangeHelper.getNextSelectionRange(
+            currentTarget.selectionStart
+          )
+          if (newRange !== undefined) {
+            setCursorPosition(...newRange.value)
+          }
+        }
+      }
+
+      // check current value,
+      // if new value is appended after the first,
+      // and under max then do so, else move to next range
+
+      console.log({ value, selRange })
+
       if (keyIsLeftRight) {
         let newRange
         if (keyValue === 'ArrowRight') {
@@ -459,15 +512,13 @@ export const TimeInput: React.FC<TimeInputProps> = ({
         backspace
       )
 
-      const currentPositionValue = keyIsNumber
-        ? inputValue[inputPos]
-        : inputValue.substring(...selRange.value)
+      const currentPositionValue = inputValue.substring(...selRange.value)
       // console.log({ inputPos, inputValue, currentPositionValue })
 
-      let newValue
+      let newValue = newVal
       let currentNumberValue = Number.parseInt(currentPositionValue)
       if (keyIsNumber) {
-        newValue = keyValue
+        // newValue = keyValue
       } else {
         if (keyValue === 'ArrowUp') {
           currentNumberValue++
