@@ -329,17 +329,47 @@ function Input<T extends string | NumberInputType>({
   errorVariant = 'text',
   type,
   className,
+  onKeyDown,
   onKeyUp,
   inputRef,
   ...props
 }: BaseInputProps<T>): JSX.Element {
+  console.log({ onKeyDown, onKeyUp })
   const containerRef = useRef<HTMLDivElement>(null)
   const [showPassword, setShowPassword] = useState(false)
   const { compact: compactFromTheme } = useTheme()
   const compact = compactFromProps ?? compactFromTheme
 
+  const handleKeyDown = useCallback<React.KeyboardEventHandler<BaseElement>>(
+    e => {
+      if (onKeyDown !== undefined) {
+        onKeyDown(e)
+      }
+      console.log('handleKeyDown', props, e)
+      // switch (e.key) {
+      //   case 'Enter': {
+      //     onPressEnter?.()
+      //     break
+      //   }
+
+      //   case 'Esc':
+      //   case 'Escape': {
+      //     onPressEscape?.()
+      //     break
+      //   }
+
+      //   default:
+      //     onKeyUp?.(e)
+      // }
+    },
+    []
+  )
   const handleKeyUp = useCallback<React.KeyboardEventHandler<BaseElement>>(
     e => {
+      console.log('handleKeyUp', props, onKeyUp)
+      if (onKeyUp !== undefined) {
+        onKeyUp(e)
+      }
       switch (e.key) {
         case 'Enter': {
           onPressEnter?.()
@@ -415,6 +445,7 @@ function Input<T extends string | NumberInputType>({
             : type
         }
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
       />
       {(type === 'current-password' || type === 'new-password') &&
